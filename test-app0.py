@@ -43,7 +43,7 @@ if st.session_state.last_date != str(date.today()):
     st.session_state.last_date = str(date.today())
     save_to_disk()
 
-st.title("The Antivenom for Decision Paralysis 🗄️")
+st.title("The Antivenom for Decision Paralysis 🗄️ v2")
 st.metric("🕵🏾‍♀️ Mission's completed today", st.session_state.completed_count)
 
 with st.expander("🤔💭📋 What do you plan on doing today, babe?"):
