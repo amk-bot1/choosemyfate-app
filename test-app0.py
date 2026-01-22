@@ -93,7 +93,7 @@ with st.expander("🤔💭📋 What do you plan on doing today, babe?"):
         st.session_state.tasks = [t.strip() for t in input_text.split('\n') if t.strip()]
         sync_to_cloud()
         st.toast("☁️ Synced to the cloud!")
-        time.sleep(1)
+        time.sleep(5)
         st.rerun()
 
 if st.session_state.current_task is None and st.session_state.tasks:
