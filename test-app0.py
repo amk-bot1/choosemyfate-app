@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import date
 from streamlit_gsheets import GSheetsConnection
 
-SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/17kHRwSpoPXgoWE2_DwVJteEUA5kYmAMowPBD1ir6sNQ/edit?gid=0#gid=0" 
+SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/17kHRwSpoPXgoWE2_DwVJteEUA5kYmAMowPBD1ir6sNQ/edit" 
 
 st.set_page_config(page_title="Decision Paralysis Antivenom", page_icon="🐍")
 
