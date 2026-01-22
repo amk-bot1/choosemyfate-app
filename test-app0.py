@@ -12,46 +12,42 @@ st.set_page_config(page_title="Decision Paralysis Antivenom", page_icon="🐍")
 def get_data():
     conn = st.connection("gsheets", type=GSheetsConnection)
     try:
+        df = conn.read(spreadsheet=SPREADSHEET_URL, ttl=0, worksheet="Sheet1")
         
-        df = conn.read(spreadsheet=SPREADSHEET_URL, usecols=[0, 1, 2, 3, 4])
-        if df.empty or len(df.columns) < 5:
-            return {
-                "tasks": [],
-                "completed_count": 0,
-                "last_date": str(date.today()),
-                "current_task": None,
-                "end_time": None
-            }
-
-        row = df.iloc[0]
+        if df.empty:
+            return None
+        
+        row = df.iloc[-1] 
+        
         tasks_str = str(row.get("tasks", ""))
-        tasks_list = tasks_str.split("|||") if tasks_str and tasks_str != "nan" else []
+        tasks_list = [t.strip() for t in tasks_str.split("|||") if t.strip() and t != "nan"]
         
         return {
             "tasks": tasks_list,
             "completed_count": int(row.get("completed_count", 0)),
             "last_date": str(row.get("last_date", str(date.today()))),
-            "current_task": str(row.get("current_task", "")) if str(row.get("current_task", "")) != "nan" else None,
+            "current_task": str(row.get("current_task", "")) if str(row.get("current_task", "")) != "nan" and row.get("current_task", "") else None,
             "end_time": float(row.get("end_time", 0.0)) if row.get("end_time", 0.0) > 0 else None
         }
     except Exception as e:
-        st.error(f"Connection Error: {e}")
         return None
 
 def save_data(state_dict):
     conn = st.connection("gsheets", type=GSheetsConnection)
-
-    tasks_str = "|||".join(state_dict["tasks"])
-
-    new_df = pd.DataFrame([{
-        "tasks": tasks_str,
-        "completed_count": state_dict["completed_count"],
-        "last_date": state_dict["last_date"],
-        "current_task": state_dict["current_task"] if state_dict["current_task"] else "",
-        "end_time": state_dict["end_time"] if state_dict["end_time"] else 0.0
-    }])
- 
-    conn.update(spreadsheet=SPREADSHEET_URL, data=new_df)
+    
+    with st.spinner("💾 Saving to Cloud... Don't lock your screen!"):
+        tasks_str = "|||".join(state_dict["tasks"])
+        
+        new_df = pd.DataFrame([{
+            "tasks": tasks_str,
+            "completed_count": state_dict["completed_count"],
+            "last_date": state_dict["last_date"],
+            "current_task": state_dict["current_task"] if state_dict["current_task"] else "",
+            "end_time": state_dict["end_time"] if state_dict["end_time"] else 0.0
+        }])
+        
+        conn.update(spreadsheet=SPREADSHEET_URL, data=new_df, worksheet="Sheet1")
+        st.toast("🪂 Cloud Sync Complete!")
 
 if 'initialized' not in st.session_state:
     cloud_data = get_data()
