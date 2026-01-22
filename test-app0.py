@@ -1,43 +1,66 @@
 import streamlit as st
 import random
 import time
-import json
-import os
-from datetime import date, datetime
+import pandas as pd
+from datetime import date
+from streamlit_gsheets import GSheetsConnection
 
-DATA_FILE = "tasks_data.json"
+SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/17kHRwSpoPXgoWE2_DwVJteEUA5kYmAMowPBD1ir6sNQ/edit?gid=0#gid=0" 
 
-def save_to_disk():
-    data = {
-        "tasks": st.session_state.tasks,
-        "completed_count": st.session_state.completed_count,
-        "last_date": st.session_state.last_date,
-        "current_task": st.session_state.current_task,
-        "end_time": st.session_state.end_time
-    }
+st.set_page_config(page_title="Decision Paralysis Antivenom", page_icon="🐍")
+
+def get_data():
+    conn = st.connection("gsheets", type=GSheetsConnection)
     try:
-        with open(DATA_FILE, "w") as f:
-            json.dump(data, f)
-    except Exception as e:
-        st.error(f"Could not save data: {e}")
+        
+        df = conn.read(spreadsheet=SPREADSHEET_URL, usecols=[0, 1, 2, 3, 4])
+        if df.empty or len(df.columns) < 5:
+            return {
+                "tasks": [],
+                "completed_count": 0,
+                "last_date": str(date.today()),
+                "current_task": None,
+                "end_time": None
+            }
 
-def load_from_disk():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r") as f:
-                return json.load(f)
-        except:
-            return None
-    return None
+        row = df.iloc[0]
+        tasks_str = str(row.get("tasks", ""))
+        tasks_list = tasks_str.split("|||") if tasks_str and tasks_str != "nan" else []
+        
+        return {
+            "tasks": tasks_list,
+            "completed_count": int(row.get("completed_count", 0)),
+            "last_date": str(row.get("last_date", str(date.today()))),
+            "current_task": str(row.get("current_task", "")) if str(row.get("current_task", "")) != "nan" else None,
+            "end_time": float(row.get("end_time", 0.0)) if row.get("end_time", 0.0) > 0 else None
+        }
+    except Exception as e:
+        st.error(f"Connection Error: {e}")
+        return None
+
+def save_data(state_dict):
+    conn = st.connection("gsheets", type=GSheetsConnection)
+
+    tasks_str = "|||".join(state_dict["tasks"])
+
+    new_df = pd.DataFrame([{
+        "tasks": tasks_str,
+        "completed_count": state_dict["completed_count"],
+        "last_date": state_dict["last_date"],
+        "current_task": state_dict["current_task"] if state_dict["current_task"] else "",
+        "end_time": state_dict["end_time"] if state_dict["end_time"] else 0.0
+    }])
+ 
+    conn.update(spreadsheet=SPREADSHEET_URL, data=new_df)
 
 if 'initialized' not in st.session_state:
-    saved_data = load_from_disk()
-    if saved_data:
-        st.session_state.tasks = saved_data.get("tasks", [])
-        st.session_state.completed_count = saved_data.get("completed_count", 0)
-        st.session_state.last_date = saved_data.get("last_date", str(date.today()))
-        st.session_state.current_task = saved_data.get("current_task", None)
-        st.session_state.end_time = saved_data.get("end_time", None)
+    cloud_data = get_data()
+    if cloud_data:
+        st.session_state.tasks = cloud_data["tasks"]
+        st.session_state.completed_count = cloud_data["completed_count"]
+        st.session_state.last_date = cloud_data["last_date"]
+        st.session_state.current_task = cloud_data["current_task"]
+        st.session_state.end_time = cloud_data["end_time"]
     else:
         st.session_state.tasks = []
         st.session_state.completed_count = 0
@@ -49,31 +72,40 @@ if 'initialized' not in st.session_state:
 if st.session_state.last_date != str(date.today()):
     st.session_state.completed_count = 0
     st.session_state.last_date = str(date.today())
-    save_to_disk()
 
-st.title("The Antivenom for Decision Paralysis 🗄️ v2.1")
-st.metric("🕵🏾‍♀️ Missions completed today", st.session_state.completed_count)
+def sync_to_cloud():
+    current_state = {
+        "tasks": st.session_state.tasks,
+        "completed_count": st.session_state.completed_count,
+        "last_date": st.session_state.last_date,
+        "current_task": st.session_state.current_task,
+        "end_time": st.session_state.end_time
+    }
+    save_data(current_state)
+
+st.title("The Antivenom for Decision Paralysis 🗄️ v3.0 (Cloud)")
+st.metric("🕵🏾‍♀️ Mission's completed today", st.session_state.completed_count)
 
 with st.expander("🤔💭📋 What do you plan on doing today, babe?"):
     current_text = "\n".join(st.session_state.tasks)
-    input_text = st.text_area("📝 Jot down your tasks:", value=current_text, height=200)
-    if st.button("🔄 Save/Update List"):
+    input_text = st.text_area("📝 Jot down your tasks here:", value=current_text, height=200)
+    if st.button("🔄 Save/Update"):
         st.session_state.tasks = [t.strip() for t in input_text.split('\n') if t.strip()]
-        save_to_disk()
-        st.toast("💽 Saved to long-term memory!")
+        sync_to_cloud()
+        st.toast("☁️ Synced to the cloud!")
         time.sleep(1)
         st.rerun()
 
 if st.session_state.current_task is None and st.session_state.tasks:
     if st.button("🧞 Choose My Fate"):
         st.session_state.current_task = random.choice(st.session_state.tasks)
-        st.session_state.end_time = time.time() + (25 * 60) 
-        save_to_disk()
+        st.session_state.end_time = time.time() + (25 * 60)
+        sync_to_cloud()
         st.rerun()
 
 if st.session_state.current_task and st.session_state.end_time:
     st.markdown("---")
-    st.subheader("👁️‍🗨️ Amor Fati, my dear. \n 📂 The 25-minute mission you've been assigned is:")
+    st.subheader("👁️‍🗨️ Amor Fati, my dear.\n📂 The 25-minute mission you've been assigned is:")
     st.header(f"🎲 {st.session_state.current_task} 🎲")
     
     remaining = st.session_state.end_time - time.time()
@@ -86,7 +118,7 @@ if st.session_state.current_task and st.session_state.end_time:
                 st.session_state.tasks.remove(st.session_state.current_task)
             st.session_state.current_task = None
             st.session_state.end_time = None
-            save_to_disk()
+            sync_to_cloud()
             st.balloons()
             time.sleep(1)
             st.rerun()
@@ -94,18 +126,17 @@ if st.session_state.current_task and st.session_state.end_time:
         if st.button("🆘 Shit I got sidetracked!"):
             st.session_state.current_task = None
             st.session_state.end_time = None
-            save_to_disk()
+            sync_to_cloud()
             st.rerun()
 
     timer_placeholder = st.empty()
-    
     if remaining > 0:
         mins, secs = divmod(int(remaining), 60)
         timer_placeholder.metric("⏲️ Time left", f"{mins:02d}:{secs:02d}")
-        time.sleep(1) 
+        time.sleep(1)
         st.rerun()
     else:
-        timer_placeholder.error("🏁 Time is up! Did you finish?")
+        timer_placeholder.error("🏁 Did you finish (pause)?")
 
 elif not st.session_state.tasks:
     st.info("📨 Add some tasks above to get started!")
